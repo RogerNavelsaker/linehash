@@ -12,6 +12,14 @@ struct Cli {
     command: Commands,
 }
 
+impl Default for Cli {
+    fn default() -> Self {
+        Self {
+            command: Commands::Skill,
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Read file to hashlined JSON array
@@ -175,7 +183,7 @@ fn main() {
         Commands::Read { file } => {
             let content = match fs::read_to_string(&file) {
                 Ok(c) => c,
-                Err(e) => error_exit(&format!("Failed to read {}: {}", file, e), false),
+                Err(e) => error_exit(&format!("Failed to read command target file {}: {}. Check permissions or path.", file, e), false),
             };
             let mut out = Vec::new();
             for (i, line) in content.lines().enumerate() {
