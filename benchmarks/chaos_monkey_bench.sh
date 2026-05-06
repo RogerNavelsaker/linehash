@@ -15,7 +15,7 @@ main() {
         WORKSPACE="/tmp/llm_bench_workspace_$test_name"
         rm -rf "$WORKSPACE" && cp -r "$test_dir" "$WORKSPACE" && cd "$WORKSPACE"
         
-        PROMPT="CRITICAL: Use le CLI.\n$(cat prompt.txt)"
+        PROMPT="CRITICAL: Use linehash CLI.\n$(cat prompt.txt)"
         $AGENT -p "$PROMPT" -o json > session.json 2>&1 &
         AGENT_PID=$!
         

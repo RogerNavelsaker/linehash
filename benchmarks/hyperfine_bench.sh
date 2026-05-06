@@ -33,25 +33,29 @@ BUNEOF
 
     info "Running Hyperfine Read Benchmark..."
     ~/.cargo/bin/hyperfine --warmup 3 \
-      "target/release/le read large_test.rs > /dev/null" \
+      "echo '{\"path\":\"large_test.rs\"}' | target/release/linehash read > /dev/null" \
       "bun bun_hash.ts large_test.rs > /dev/null"
 
     info "Preparing Apply Benchmark payload..."
-    cat << 'JSONEOF' > edit.json
-[
-  { "op": "r", "l": 499, "h": "dd", "c": "    println!(\"248 - EDITED\");" },
-  { "op": "mr", "s": 502, "e": 503, "h": ["2f", "35"], "c": ["    let var_250 = 250000;", "    println!(\"250000\");"] }
-]
-JSONEOF
+    target/release/linehash read large_test.rs > read.jsonl
+    python3 -c '
+import json
+read = json.load(open("read.jsonl"))
+lines = read["content"]["lines"]
+anchors = {line["line"]: line["anchor"] for line in lines}
+with open("edit.jsonl", "w") as f:
+    f.write(json.dumps({"path": "large_test.rs", "op": "replace", "anchor": anchors[499], "text": "    println!(\"248 - EDITED\");"}) + "\n")
+    f.write(json.dumps({"path": "large_test.rs", "op": "replace", "from": anchors[502], "to": anchors[503], "text": "    let var_250 = 250000;\n    println!(\"250000\");"}) + "\n")
+'
 
     cp large_test.rs large_test.rs.bak
     info "Running Hyperfine Apply Benchmark..."
     ~/.cargo/bin/hyperfine --warmup 3 \
       --prepare "cp large_test.rs.bak large_test.rs" \
-      "cat edit.json | target/release/le apply large_test.rs > /dev/null"
+      "cat edit.jsonl | target/release/linehash edit > /dev/null"
 
     info "Cleaning up..."
-    rm generate_test.py bun_hash.ts large_test.rs large_test.rs.bak edit.json
+    rm generate_test.py bun_hash.ts large_test.rs large_test.rs.bak read.jsonl edit.jsonl
     info "Benchmarks complete."
 }
 

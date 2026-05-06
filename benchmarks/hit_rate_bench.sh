@@ -26,7 +26,7 @@ main() {
         rm -rf "$WORKSPACE" && cp -r "$test_dir" "$WORKSPACE" && cd "$WORKSPACE"
         
         PROMPT=$(cat prompt.txt)
-        [[ "$USE_SKILL" == "true" ]] && PROMPT="CRITICAL: Use le CLI.\n$PROMPT"
+        [[ "$USE_SKILL" == "true" ]] && PROMPT="CRITICAL: Use linehash CLI.\n$PROMPT"
         
         debug "Executing agent: $AGENT"
         $AGENT -p "$PROMPT" -o json > session.json 2>&1 || warning "Agent returned non-zero"

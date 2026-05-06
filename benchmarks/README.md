@@ -1,6 +1,6 @@
-# Linehash Edit (le) Benchmarks
+# linehash (le) Benchmarks
 
-This directory contains scripts to test and benchmark the performance and reliability of `le`.
+This directory contains scripts to test and benchmark the performance and reliability of `linehash` (`le`).
 
 ## 1. Hyperfine Performance Benchmark
 
@@ -14,7 +14,7 @@ This generates a 20,000 line synthetic file and runs `hyperfine` to compare read
 
 ## 2. LLM Agent Hit Rate A/B Test
 
-Tests how reliably an LLM agent (Gemini, Claude Code, Codex) can perform edits with and without `le`.
+Tests how reliably an LLM agent (Gemini, Claude Code, Codex) can perform edits with and without `linehash` (`le`).
 
 **Prerequisites:**
 You need a directory containing test cases (e.g., `dataset/test_1`). Each test case must be a valid Rust project (or another language you are testing) containing a `prompt.txt` that describes the bug to fix, and a test suite that fails initially but will pass if the LLM makes the right edit.
@@ -25,8 +25,8 @@ chmod +x hit_rate_bench.sh
 ./hit_rate_bench.sh --agent "gemini --yolo" --dataset ./dataset
 ```
 
-**Running the Experimental Group (With Linehash Edit skill):**
-Make sure the `le` skill is loaded in your environment, then run:
+**Running the Experimental Group (With linehash skill):**
+Make sure the `linehash` (`le`) skill is loaded in your environment, then run:
 ```bash
 ./hit_rate_bench.sh --agent "gemini --yolo" --dataset ./dataset --use-skill
 ```
@@ -35,11 +35,11 @@ Compare the hit rate (%) between the two runs to measure the reduction in halluc
 
 ## 3. Results (Hyperfine Benchmarks)
 
-These benchmarks were run on a synthetic 20,000-line Rust file (`large_test.rs`) within the default `flox` environment. They compare the native Rust `le` against a simulated MCP execution (running via `bun` to approximate a fast Node/JS environment without full JSON-RPC IPC overhead).
+These benchmarks were run on a synthetic 20,000-line Rust file (`large_test.rs`) within the default `flox` environment. They compare the native Rust `linehash` (`le`) against a simulated MCP execution (running via `bun` to approximate a fast Node/JS environment without full JSON-RPC IPC overhead).
 
 ### Read Benchmark (Hashing 20,000 lines)
 ```text
-Benchmark 1: target/release/le read large_test.rs > /dev/null
+Benchmark 1: echo '{"path":"large_test.rs"}' | target/release/linehash read > /dev/null
   Time (mean ± σ):       4.9 ms ±   1.0 ms    [User: 3.0 ms, System: 1.8 ms]
   Range (min … max):     3.2 ms …   9.1 ms    381 runs
 
@@ -48,7 +48,7 @@ Benchmark 2: bun bun_hash.ts large_test.rs > /dev/null
   Range (min … max):    17.1 ms …  34.9 ms    153 runs
 
 Summary
-  target/release/le read large_test.rs > /dev/null ran
+  echo '{"path":"large_test.rs"}' | target/release/linehash read > /dev/null ran
     4.03 ± 0.92 times faster than bun bun_hash.ts large_test.rs > /dev/null
 ```
 **Takeaway:** The native Rust implementation calculates cryptographic hashes for 20,000 lines natively in roughly **4.9 milliseconds**—significantly faster than even the raw script execution time of Bun.
@@ -57,7 +57,7 @@ Summary
 Applying a multi-line JSON replacement directly into the middle of the 20,000-line file natively:
 
 ```text
-Benchmark 1: cat edit.json | target/release/le apply large_test.rs > /dev/null
+Benchmark 1: cat edit.jsonl | target/release/linehash edit > /dev/null
   Time (mean ± σ):       4.2 ms ±   0.7 ms    [User: 1.7 ms, System: 2.1 ms]
   Range (min … max):     2.8 ms …   7.1 ms    361 runs
 ```

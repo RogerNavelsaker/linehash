@@ -1,329 +1,464 @@
+use chrono::SecondsFormat;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{self, Read};
+use std::path::{Path, PathBuf};
 use std::process;
 use xxhash_rust::xxh32::xxh32;
 
 #[derive(Parser)]
-#[command(author, version, about = "LLM compact hashmap line editor")]
+#[command(author, version, about = "JSONL line-hash file tool for AI agents")]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
-}
-
-impl Default for Cli {
-    fn default() -> Self {
-        Self {
-            command: Commands::Skill,
-        }
-    }
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Read file to hashlined JSON array
-    Read { file: String },
-    /// Apply edits from JSON array on stdin
-    Apply { file: String },
-    /// Generate skill markdown with instructions and schema
+    Read {
+        path: Option<PathBuf>,
+        #[arg(long)]
+        after: Option<String>,
+        #[arg(long, default_value_t = 2000)]
+        limit: usize,
+    },
+    Edit {
+        path: Option<PathBuf>,
+    },
     Skill,
 }
 
+#[derive(Deserialize)]
+struct ReadRequest {
+    req_id: Option<String>,
+    path: PathBuf,
+    after: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Deserialize)]
+struct EditRequest {
+    req_id: Option<String>,
+    path: Option<PathBuf>,
+    op: String,
+    anchor: Option<String>,
+    from: Option<String>,
+    to: Option<String>,
+    before: Option<String>,
+    after: Option<String>,
+    text: Option<String>,
+}
+
 #[derive(Serialize)]
-struct LineOutput {
-    l: usize,
-    h: String,
-    c: String,
+struct AnchoredLine {
+    line: usize,
+    anchor: String,
+    text: String,
 }
-
-#[derive(Deserialize, Debug)]
-#[serde(tag = "op")]
-enum Edit {
-    #[serde(rename = "r")]
-    Replace { l: usize, h: String, c: String },
-    #[serde(rename = "mr")]
-    ReplaceMulti {
-        s: usize,
-        e: usize,
-        h: Vec<String>,
-        c: Vec<String>,
-    },
-    #[serde(rename = "i")]
-    Insert { l: usize, h: String, c: Vec<String> },
-    #[serde(rename = "d")]
-    Delete { s: usize, e: usize, h: Vec<String> },
-}
-
-impl Edit {
-    fn start_line(&self) -> usize {
-        match self {
-            Edit::Replace { l, .. } => *l,
-            Edit::ReplaceMulti { s, .. } => *s,
-            Edit::Insert { l, .. } => *l,
-            Edit::Delete { s, .. } => *s,
-        }
-    }
-}
-
-const JSON_SCHEMA: &str = r#"{
-  "type": "array",
-  "items": {
-    "type": "object",
-    "oneOf": [
-      {
-        "properties": {
-          "op": { "const": "r" },
-          "l": { "type": "integer", "description": "Line number to replace (1-based)" },
-          "h": { "type": "string", "description": "2-char hex hash of the original line" },
-          "c": { "type": "string", "description": "New content" }
-        },
-        "required": ["op", "l", "h", "c"]
-      },
-      {
-        "properties": {
-          "op": { "const": "mr" },
-          "s": { "type": "integer", "description": "Start line number (1-based)" },
-          "e": { "type": "integer", "description": "End line number (inclusive)" },
-          "h": { "type": "array", "items": { "type": "string" }, "description": "Array of hashes for each line in range" },
-          "c": { "type": "array", "items": { "type": "string" }, "description": "Array of new lines" }
-        },
-        "required": ["op", "s", "e", "h", "c"]
-      },
-      {
-        "properties": {
-          "op": { "const": "i" },
-          "l": { "type": "integer", "description": "Line number to insert after (use 0 for BOF)" },
-          "h": { "type": "string", "description": "Hash of line 'l' (use '00' for BOF)" },
-          "c": { "type": "array", "items": { "type": "string" }, "description": "Array of new lines to insert" }
-        },
-        "required": ["op", "l", "h", "c"]
-      },
-      {
-        "properties": {
-          "op": { "const": "d" },
-          "s": { "type": "integer", "description": "Start line number to delete (1-based)" },
-          "e": { "type": "integer", "description": "End line number to delete (inclusive)" },
-          "h": { "type": "array", "items": { "type": "string" }, "description": "Array of hashes for each line to delete" }
-        },
-        "required": ["op", "s", "e", "h"]
-      }
-    ]
-  }
-}"#;
 
 const SKILL_MARKDOWN: &str = r#"---
-name: le
-description: A high-performance, compact hashmap line editor for safe and deterministic file modifications.
+name: linehash
+description: JSONL line-hash file read/edit tool for AI agents.
 ---
 
-# Linehash Edit (le) Protocol
+# linehash
 
-You are equipped with `le`, a native, zero-latency CLI for line-editing. This tool prevents hallucinations and "lost updates" by requiring cryptographic hashes of the lines you intend to edit.
+Command shape:
+- `linehash read`
+- `linehash edit`
+- `linehash skill`
 
-## Reading Files
-To view a file, run:
-`le read <filepath>`
+Alias:
+- `le read`
+- `le edit`
 
-The output is a JSON array of objects representing lines:
-`[{"l": 1, "h": "2f", "c": "fn main() {"}, ...]`
-- `l`: Line number (1-based).
-- `h`: 2-character hex hash (ignoring leading/trailing whitespace).
-- `c`: The line's content.
+Input is JSONL. One row = one action. Output is JSONL. One row = one result envelope.
 
-## Editing Files
-To apply edits, pipe a compact JSON array of edit operations into `le apply <filepath>`.
+Read:
+`echo '{"path":"src/main.rs","limit":2000}' | linehash read`
 
-Supported operations (`op`):
-1. **Single-line Replace** (`r`):
-   `[{"op": "r", "l": 1, "h": "2f", "c": "fn main(args) {"}]`
-2. **Multi-line Replace** (`mr`):
-   `[{"op": "mr", "s": 2, "e": 3, "h": ["a1", "b2"], "c": ["let a = 1;", "let b = 2;"]}]`
-3. **Insert After** (`i`):
-   `[{"op": "i", "l": 10, "h": "d4", "c": ["new line 1", "new line 2"]}]`
-   *(To insert at the beginning of the file, use `l: 0` and `h: "00"`)*
-4. **Delete Block** (`d`):
-   `[{"op": "d", "s": 5, "e": 6, "h": ["e5", "f6"]}]`
+Read result:
+`{"req_id":"req_1","status":"completed","content":{"datetime":"...","path":"/abs/path","lines":[{"line":1,"anchor":"a1b2","text":"fn main() {"}],"truncated":false,"total_lines":10}}`
 
-### Critical Rules:
-1. You MUST provide the exact hash (`h`) for the line(s) being targeted. If the file has changed and the hash doesn't match, the entire batch of edits will be rejected.
-2. For multi-line (`mr`) and delete (`d`) operations, the length of the hash array `h` MUST match the number of lines from `s` to `e` inclusive.
-3. Edits are processed atomically. Do not send malformed JSON.
-4. Output your edits cleanly to `stdin`. For example:
-   `echo '[{"op":"r","l":5,"h":"1a","c":"let x = 42;"}]' | le apply src/main.rs`
+Edit:
+`echo '{"path":"src/main.rs","op":"replace","anchor":"a1b2","text":"fn main() {"}' | linehash edit`
+
+Edit ops:
+- `replace`: `anchor` or `from` + `to`, plus `text`. Empty `text` deletes.
+- `insert_before`: `before` or `anchor`, plus `text`.
+- `insert_after`: `after` or `anchor`, plus `text`.
+
+Fresh `linehash read` anchors are authoritative. Stale anchors return `status:"rejected"` and `detail:"anchor_invalid"`.
 "#;
 
-fn compute_hash(line: &str) -> String {
-    let trimmed = line.trim();
-    let h = if trimmed.is_empty() {
-        0
-    } else {
-        xxh32(trimmed.as_bytes(), 0) % 256
-    };
-    format!("{:02x}", h)
-}
-
-fn error_exit(msg: &str, include_schema: bool) -> ! {
-    if include_schema {
-        let schema: serde_json::Value =
-            serde_json::from_str(JSON_SCHEMA).unwrap_or(serde_json::Value::Null);
-        eprintln!("{}", serde_json::json!({ "error": msg, "schema": schema }));
-    } else {
-        eprintln!("{}", serde_json::json!({ "error": msg }));
-    }
-    process::exit(1);
-}
-
 fn main() {
+    if let Err(error) = run() {
+        eprintln!(
+            "{}",
+            json!({ "status": "failed", "content": { "message": error } })
+        );
+        process::exit(1);
+    }
+}
+
+fn run() -> Result<(), String> {
     let cli = Cli::parse();
-    match cli.command {
+    match cli.command.unwrap_or(Commands::Skill) {
+        Commands::Read { path, after, limit } => read_command(path, after, limit),
+        Commands::Edit { path } => edit_command(path),
         Commands::Skill => {
-            println!("{}", SKILL_MARKDOWN);
+            println!("{SKILL_MARKDOWN}");
+            Ok(())
         }
-        Commands::Read { file } => {
-            let content = match fs::read_to_string(&file) {
-                Ok(c) => c,
-                Err(e) => error_exit(&format!("Failed to read command target file {}: {}. Check permissions or path.", file, e), false),
-            };
-            let mut out = Vec::new();
-            for (i, line) in content.lines().enumerate() {
-                out.push(LineOutput {
-                    l: i + 1,
-                    h: compute_hash(line),
-                    c: line.to_string(),
-                });
+    }
+}
+
+fn read_command(path: Option<PathBuf>, after: Option<String>, limit: usize) -> Result<(), String> {
+    if let Some(path) = path {
+        let request = ReadRequest {
+            req_id: Some("req_1".to_string()),
+            path,
+            after,
+            limit: Some(limit),
+        };
+        println!("{}", read_result(&request));
+        return Ok(());
+    }
+
+    for (index, value) in read_jsonl()?.into_iter().enumerate() {
+        let fallback_req_id = format!("req_{}", index + 1);
+        match serde_json::from_value::<ReadRequest>(value) {
+            Ok(mut request) => {
+                request.req_id = Some(request.req_id.unwrap_or(fallback_req_id));
+                println!("{}", read_result(&request));
             }
-            println!("{}", serde_json::to_string(&out).unwrap());
+            Err(error) => println!("{}", rejected(&fallback_req_id, "input_invalid", error)),
         }
-        Commands::Apply { file } => {
-            let mut input = String::new();
-            io::stdin()
-                .read_to_string(&mut input)
-                .unwrap_or_else(|_| error_exit("Failed to read stdin", false));
+    }
+    Ok(())
+}
 
-            let mut edits: Vec<Edit> = match serde_json::from_str(&input) {
-                Ok(e) => e,
-                Err(e) => error_exit(&format!("Invalid JSON payload: {}", e), true),
-            };
-
-            edits.sort_by(|a, b| b.start_line().cmp(&a.start_line()));
-            let content = match fs::read_to_string(&file) {
-                Ok(c) => c,
-                Err(e) => error_exit(&format!("Failed to read {}: {}", file, e), false),
-            };
-            let has_trailing_newline = content.ends_with('\n');
-            let mut lines: Vec<String> = content.split('\n').map(|s| s.to_string()).collect();
-            if has_trailing_newline && !lines.is_empty() {
-                lines.pop();
-            }
-
-            for edit in edits {
-                match edit {
-                    Edit::Replace { l, h, c } => {
-                        let idx = l - 1;
-                        if idx >= lines.len() {
-                            error_exit(&format!("Line {} out of bounds", l), true);
-                        }
-                        let expected_h = compute_hash(&lines[idx]);
-                        if expected_h != h {
-                            error_exit(
-                                &format!(
-                                    "Hash mismatch at line {}. Expected {}, got {}",
-                                    l, expected_h, h
-                                ),
-                                false,
-                            );
-                        }
-                        lines[idx] = c;
-                    }
-                    Edit::ReplaceMulti { s, e, h, c } => {
-                        let start_idx = s - 1;
-                        let end_idx = e - 1;
-                        if end_idx >= lines.len() {
-                            error_exit(&format!("Line {} out of bounds", e), true);
-                        }
-                        if h.len() != (e - s + 1) {
-                            error_exit("Hash array length must match line range", true);
-                        }
-                        for (i, hash) in h.iter().enumerate() {
-                            let expected_h = compute_hash(&lines[start_idx + i]);
-                            if expected_h != *hash {
-                                error_exit(
-                                    &format!(
-                                        "Hash mismatch at line {}. Expected {}, got {}",
-                                        s + i,
-                                        expected_h,
-                                        hash
-                                    ),
-                                    false,
-                                );
-                            }
-                        }
-                        lines.splice(start_idx..=end_idx, c);
-                    }
-                    Edit::Insert { l, h, c } => {
-                        if l == 0 {
-                            if h != "00" {
-                                error_exit("BOF insert expected hash 00", false);
-                            }
-                            for (i, new_line) in c.into_iter().enumerate() {
-                                lines.insert(i, new_line);
-                            }
-                        } else {
-                            let idx = l - 1;
-                            if idx >= lines.len() {
-                                error_exit(&format!("Line {} out of bounds", l), true);
-                            }
-                            let expected_h = compute_hash(&lines[idx]);
-                            if expected_h != h {
-                                error_exit(
-                                    &format!(
-                                        "Hash mismatch at line {}. Expected {}, got {}",
-                                        l, expected_h, h
-                                    ),
-                                    false,
-                                );
-                            }
-                            for (i, new_line) in c.into_iter().enumerate() {
-                                lines.insert(idx + 1 + i, new_line);
-                            }
-                        }
-                    }
-                    Edit::Delete { s, e, h } => {
-                        let start_idx = s - 1;
-                        let end_idx = e - 1;
-                        if end_idx >= lines.len() {
-                            error_exit(&format!("Line {} out of bounds", e), true);
-                        }
-                        if h.len() != (e - s + 1) {
-                            error_exit("Hash array length must match line range", true);
-                        }
-                        for (i, hash) in h.iter().enumerate() {
-                            let expected_h = compute_hash(&lines[start_idx + i]);
-                            if expected_h != *hash {
-                                error_exit(
-                                    &format!(
-                                        "Hash mismatch at line {}. Expected {}, got {}",
-                                        s + i,
-                                        expected_h,
-                                        hash
-                                    ),
-                                    false,
-                                );
-                            }
-                        }
-                        lines.drain(start_idx..=end_idx);
-                    }
+fn edit_command(path: Option<PathBuf>) -> Result<(), String> {
+    for (index, value) in read_jsonl()?.into_iter().enumerate() {
+        let fallback_req_id = format!("req_{}", index + 1);
+        match serde_json::from_value::<EditRequest>(value) {
+            Ok(mut request) => {
+                request.req_id = Some(request.req_id.unwrap_or(fallback_req_id));
+                if request.path.is_none() {
+                    request.path = path.clone();
                 }
+                println!("{}", edit_result(&request));
             }
-            let mut output = lines.join("\n");
-            if has_trailing_newline {
-                output.push('\n');
-            }
-            if let Err(e) = fs::write(&file, output) {
-                error_exit(&format!("Failed to write to file: {}", e), false);
-            }
-            println!("{}", serde_json::json!({"status": "success"}));
+            Err(error) => println!("{}", rejected(&fallback_req_id, "input_invalid", error)),
         }
+    }
+    Ok(())
+}
+
+fn read_result(request: &ReadRequest) -> Value {
+    let req_id = request.req_id.as_deref().unwrap_or("req_1");
+    let limit = request.limit.unwrap_or(2000);
+    match fs::read_to_string(&request.path) {
+        Ok(content) => {
+            let lines = content.lines().map(str::to_string).collect::<Vec<_>>();
+            match window(&lines, request.after.as_deref(), limit) {
+                Ok((window, truncated)) => json!({
+                    "req_id": req_id,
+                    "status": "completed",
+                    "content": {
+                        "datetime": now(),
+                        "path": absolute_path(&request.path),
+                        "lines": window,
+                        "after": request.after,
+                        "limit": limit,
+                        "truncated": truncated,
+                        "total_lines": lines.len()
+                    }
+                }),
+                Err(detail) => rejected(req_id, &detail, "anchor not found in current file"),
+            }
+        }
+        Err(error) => failed(req_id, error),
+    }
+}
+
+fn edit_result(request: &EditRequest) -> Value {
+    let req_id = request.req_id.as_deref().unwrap_or("req_1");
+    let Some(path) = &request.path else {
+        return rejected(req_id, "input_invalid", "missing path");
+    };
+
+    match apply_edit(path, request) {
+        Ok(()) => json!({
+            "req_id": req_id,
+            "status": "completed",
+            "content": {
+                "datetime": now(),
+                "path": absolute_path(path)
+            }
+        }),
+        Err(EditError::Rejected { detail, message }) => rejected(req_id, &detail, message),
+        Err(EditError::Failed(message)) => failed(req_id, message),
+    }
+}
+
+fn window(
+    lines: &[String],
+    after: Option<&str>,
+    limit: usize,
+) -> Result<(Vec<AnchoredLine>, bool), String> {
+    let anchors = anchors_for(lines);
+    let start = match after {
+        Some(anchor) => anchors
+            .iter()
+            .position(|candidate| candidate == anchor)
+            .map(|index| index + 1)
+            .ok_or_else(|| "anchor_invalid".to_string())?,
+        None => 0,
+    };
+    let end = usize::min(start + limit, lines.len());
+    let output = (start..end)
+        .map(|index| AnchoredLine {
+            line: index + 1,
+            anchor: anchors[index].clone(),
+            text: lines[index].clone(),
+        })
+        .collect();
+    Ok((output, end < lines.len()))
+}
+
+fn apply_edit(path: &Path, request: &EditRequest) -> Result<(), EditError> {
+    let content = fs::read_to_string(path).map_err(|error| EditError::Failed(error.to_string()))?;
+    let trailing_newline = content.ends_with('\n');
+    let mut lines = content.split('\n').map(str::to_string).collect::<Vec<_>>();
+    if trailing_newline && !lines.is_empty() {
+        lines.pop();
+    }
+
+    let operation = operation_for(request, &anchors_for(&lines))?;
+    match operation {
+        Operation::Replace { start, end, text } => {
+            lines.splice(start..=end, split_payload(&text));
+        }
+        Operation::Insert { index, text } => {
+            for (offset, line) in split_payload(&text).into_iter().enumerate() {
+                lines.insert(index + offset, line);
+            }
+        }
+    }
+
+    let mut output = lines.join("\n");
+    if trailing_newline {
+        output.push('\n');
+    }
+    fs::write(path, output).map_err(|error| EditError::Failed(error.to_string()))
+}
+
+fn operation_for(request: &EditRequest, anchors: &[String]) -> Result<Operation, EditError> {
+    match request.op.as_str() {
+        "replace" => replace_operation(request, anchors),
+        "insert_before" => {
+            let anchor = request
+                .before
+                .as_ref()
+                .or(request.anchor.as_ref())
+                .ok_or_else(|| {
+                    EditError::rejected("input_invalid", "insert_before requires before or anchor")
+                })?;
+            Ok(Operation::Insert {
+                index: anchor_index(anchors, anchor)?,
+                text: request.text.clone().unwrap_or_default(),
+            })
+        }
+        "insert_after" => {
+            let anchor = request
+                .after
+                .as_ref()
+                .or(request.anchor.as_ref())
+                .ok_or_else(|| {
+                    EditError::rejected("input_invalid", "insert_after requires after or anchor")
+                })?;
+            Ok(Operation::Insert {
+                index: anchor_index(anchors, anchor)? + 1,
+                text: request.text.clone().unwrap_or_default(),
+            })
+        }
+        _ => Err(EditError::rejected("input_invalid", "unknown op")),
+    }
+}
+
+fn replace_operation(request: &EditRequest, anchors: &[String]) -> Result<Operation, EditError> {
+    let text = request.text.clone().unwrap_or_default();
+    if let Some(anchor) = &request.anchor {
+        let index = anchor_index(anchors, anchor)?;
+        return Ok(Operation::Replace {
+            start: index,
+            end: index,
+            text,
+        });
+    }
+
+    let from = request.from.as_ref().ok_or_else(|| {
+        EditError::rejected("input_invalid", "replace requires anchor or from/to")
+    })?;
+    let to = request.to.as_ref().ok_or_else(|| {
+        EditError::rejected("input_invalid", "replace requires anchor or from/to")
+    })?;
+    let start = anchor_index(anchors, from)?;
+    let end = anchor_index(anchors, to)?;
+    if start > end {
+        return Err(EditError::rejected(
+            "input_invalid",
+            "from anchor is after to anchor",
+        ));
+    }
+    Ok(Operation::Replace { start, end, text })
+}
+
+fn anchor_index(anchors: &[String], anchor: &str) -> Result<usize, EditError> {
+    anchors
+        .iter()
+        .position(|candidate| candidate == anchor)
+        .ok_or_else(|| EditError::rejected("anchor_invalid", "anchor not found in current file"))
+}
+
+fn anchors_for(lines: &[String]) -> Vec<String> {
+    let bases = lines
+        .iter()
+        .map(|line| four_char_hash(line.trim().as_bytes()))
+        .collect::<Vec<_>>();
+    let mut counts = HashMap::<String, usize>::new();
+    for base in &bases {
+        *counts.entry(base.clone()).or_default() += 1;
+    }
+
+    let mut used = HashSet::new();
+    bases
+        .iter()
+        .enumerate()
+        .map(|(index, base)| {
+            if counts[base] == 1 && used.insert(base.clone()) {
+                return base.clone();
+            }
+            unique_anchor(&mut used, index, &lines[index])
+        })
+        .collect()
+}
+
+fn unique_anchor(used: &mut HashSet<String>, index: usize, line: &str) -> String {
+    for salt in 0.. {
+        let anchor = four_char_hash(format!("{salt}\0{index}\0{line}").as_bytes());
+        if used.insert(anchor.clone()) {
+            return anchor;
+        }
+    }
+    unreachable!()
+}
+
+fn four_char_hash(input: &[u8]) -> String {
+    format!("{:04x}", xxh32(input, 0) & 0xffff)
+}
+
+fn split_payload(text: &str) -> Vec<String> {
+    if text.is_empty() {
+        Vec::new()
+    } else {
+        text.split('\n').map(str::to_string).collect()
+    }
+}
+
+fn read_jsonl() -> Result<Vec<Value>, String> {
+    let mut input = String::new();
+    io::stdin()
+        .read_to_string(&mut input)
+        .map_err(|error| error.to_string())?;
+    input
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).map_err(|error| error.to_string()))
+        .collect()
+}
+
+fn now() -> String {
+    chrono::Local::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+fn absolute_path(path: &Path) -> String {
+    path.canonicalize()
+        .unwrap_or_else(|_| path.to_path_buf())
+        .display()
+        .to_string()
+}
+
+fn rejected(req_id: &str, detail: &str, message: impl ToString) -> Value {
+    json!({
+        "req_id": req_id,
+        "status": "rejected",
+        "detail": detail,
+        "content": {
+            "message": message.to_string()
+        }
+    })
+}
+
+fn failed(req_id: &str, message: impl ToString) -> Value {
+    json!({
+        "req_id": req_id,
+        "status": "failed",
+        "content": {
+            "message": message.to_string()
+        }
+    })
+}
+
+enum Operation {
+    Replace {
+        start: usize,
+        end: usize,
+        text: String,
+    },
+    Insert {
+        index: usize,
+        text: String,
+    },
+}
+
+enum EditError {
+    Rejected { detail: String, message: String },
+    Failed(String),
+}
+
+impl EditError {
+    fn rejected(detail: &str, message: &str) -> Self {
+        Self::Rejected {
+            detail: detail.to_string(),
+            message: message.to_string(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repeated_lines_get_unique_anchors() {
+        let anchors = anchors_for(&["same".to_string(), "same".to_string()]);
+        assert_eq!(anchors.len(), 2);
+        assert_eq!(anchors[0].len(), 4);
+        assert_eq!(anchors[1].len(), 4);
+        assert_ne!(anchors[0], anchors[1]);
+    }
+
+    #[test]
+    fn empty_replace_text_deletes() {
+        assert_eq!(split_payload(""), Vec::<String>::new());
+        assert_eq!(
+            split_payload("a\nb"),
+            vec!["a".to_string(), "b".to_string()]
+        );
     }
 }
