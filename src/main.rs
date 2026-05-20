@@ -19,8 +19,13 @@ struct Cli {
 enum Commands {
     Read {
         path: PathBuf,
+        /// Anchor (4-char hex) to start after (exclusive). Use --offset for line-number-based windowing. (exclusive). Expects a 4-char hex anchor.
         #[arg(long)]
         after: Option<String>,
+        /// Line number to start from (1-indexed). Mutually exclusive with --after.
+        #[arg(long)]
+        offset: Option<usize>,
+        /// Maximum number of lines to return
         #[arg(long, default_value_t = 2000)]
         limit: usize,
     },
@@ -31,6 +36,7 @@ enum Commands {
 }
 
 #[derive(Serialize)]
+#[derive(Debug)]
 struct AnchoredLine {
     line: usize,
     anchor: String,
@@ -90,7 +96,7 @@ fn main() {
 fn run() -> Result<(), String> {
     let cli = Cli::parse();
     match cli.command.unwrap_or(Commands::Skill) {
-        Commands::Read { path, after, limit } => read_command(&path, after.as_deref(), limit),
+        Commands::Read { path, after, offset, limit } => read_command(&path, after.as_deref(), offset, limit),
         Commands::Edit { path } => edit_command(&path),
         Commands::Skill => {
             println!("{SKILL_MARKDOWN}");
@@ -99,10 +105,15 @@ fn run() -> Result<(), String> {
     }
 }
 
-fn read_command(path: &Path, after: Option<&str>, limit: usize) -> Result<(), String> {
+fn read_command(path: &Path, after: Option<&str>, offset: Option<usize>, limit: usize) -> Result<(), String> {
+    // Validate: --after and --offset are mutually exclusive
+    if after.is_some() && offset.is_some() {
+        return Err("--after and --offset are mutually exclusive. Use --after for anchor-based windowing, --offset for line-number-based windowing.".to_string());
+    }
+
     let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let lines = content.lines().map(str::to_string).collect::<Vec<_>>();
-    for line in window(&lines, after, limit)? {
+    for line in window(&lines, after, offset, limit)? {
         println!("{}", serde_json::to_string(&line).unwrap());
     }
     Ok(())
@@ -208,16 +219,30 @@ fn edit_start_index(edit: &Edit, anchors: &[String]) -> Result<usize, EditError>
 fn window(
     lines: &[String],
     after: Option<&str>,
+    offset: Option<usize>,
     limit: usize,
 ) -> Result<Vec<AnchoredLine>, String> {
     let anchors = anchors_for(lines);
-    let start = match after {
-        Some(anchor) => anchors
+    let start = match (after, offset) {
+        (Some(anchor), None) => anchors
             .iter()
             .position(|candidate| candidate == anchor)
             .map(|index| index + 1)
             .ok_or_else(|| "anchor_invalid".to_string())?,
-        None => 0,
+        (None, Some(line_num)) => {
+            // offset is 1-indexed, convert to 0-indexed
+            if line_num < 1 {
+                return Err("--offset must be >= 1".to_string());
+            }
+            // Handle empty files or offset beyond file length
+            if lines.is_empty() {
+                return Ok(Vec::new());
+            }
+            let idx = line_num.saturating_sub(1).min(lines.len() - 1);
+            idx
+        }
+        (None, None) => 0,
+        _ => unreachable!(), // Mutually exclusive check in read_command
     };
     let end = usize::min(start + limit, lines.len());
     Ok((start..end)
@@ -359,5 +384,78 @@ mod tests {
             payload_lines("a\nb"),
             vec!["a".to_string(), "b".to_string()]
         );
+    }
+}
+
+// Additional tests for window function with offset and after
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+
+    #[test]
+    fn window_offset_returns_correct_lines() {
+        let lines = vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string(), "e".to_string()];
+        // offset 3 (1-indexed) = index 2, limit 2 => lines c, d
+        let result = window(&lines, None, Some(3), 2).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].line, 3);
+        assert_eq!(result[0].text, "c");
+        assert_eq!(result[1].line, 4);
+        assert_eq!(result[1].text, "d");
+    }
+
+    #[test]
+    fn window_offset_beyond_file_returns_from_last_line() {
+        let lines = vec!["a".to_string(), "b".to_string()];
+        // offset 100 beyond file length - clamps to last line (index 1 = line 2)
+        let result = window(&lines, None, Some(100), 5).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].line, 2);
+        assert_eq!(result[0].text, "b");
+    }
+
+    #[test]
+    fn window_empty_file_returns_empty() {
+        let lines: Vec<String> = vec![];
+        let result = window(&lines, None, Some(1), 5).unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn window_offset_invalid_returns_error() {
+        let lines = vec!["a".to_string()];
+        let result = window(&lines, None, Some(0), 5);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains(">= 1"), "error was: {}", err);
+    }
+
+    #[test]
+    fn window_after_returns_lines_after_anchor() {
+        let lines = vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()];
+        let anchors = anchors_for(&lines);
+        // anchors[1] is the anchor for "b", so after should start at index 2 (line 3)
+        let result = window(&lines, Some(&anchors[1]), None, 2).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].line, 3);
+        assert_eq!(result[0].text, "c");
+    }
+
+    #[test]
+    fn window_after_not_found_returns_error() {
+        let lines = vec!["a".to_string()];
+        let result = window(&lines, Some("zzzz"), None, 5);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err, "anchor_invalid", "error was: {}", err);
+    }
+
+    #[test]
+    fn window_no_offset_no_after_returns_from_start() {
+        let lines = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let result = window(&lines, None, None, 2).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].line, 1);
+        assert_eq!(result[0].text, "a");
     }
 }
