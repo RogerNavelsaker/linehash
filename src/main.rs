@@ -36,9 +36,9 @@ enum Commands {
         fuzzy: bool,
     },
     Diff {
-        /// Path to the old (original) file
+        /// Path to the old (original) file. Use `-` to read from stdin.
         old: PathBuf,
-        /// Path to the new (modified) file
+        /// Path to the new (modified) file. Use `-` to read from stdin.
         new: PathBuf,
         /// Number of context lines (default: 3)
         #[arg(long, default_value_t = 3)]
@@ -167,18 +167,45 @@ fn diff_command(
     label_old: Option<&str>,
     label_new: Option<&str>,
 ) -> Result<(), String> {
-    let old_content = fs::read_to_string(old_path).map_err(|e| format!("read old: {e}"))?;
-    let new_content = fs::read_to_string(new_path).map_err(|e| format!("read new: {e}"))?;
+    // Read old content: from file or stdin (when path is "-")
+    let old_content = if old_path.as_os_str() == "-" {
+        let mut buf = String::new();
+        io::stdin()
+            .read_to_string(&mut buf)
+            .map_err(|e| format!("read old stdin: {e}"))?;
+        buf
+    } else {
+        fs::read_to_string(old_path).map_err(|e| format!("read old: {e}"))?
+    };
 
-    // Default labels: derive from path basenames
-    let old_label_default = old_path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| old_path.display().to_string());
-    let new_label_default = new_path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| new_path.display().to_string());
+    // Read new content: from file or stdin (when path is "-")
+    let new_content = if new_path.as_os_str() == "-" {
+        let mut buf = String::new();
+        io::stdin()
+            .read_to_string(&mut buf)
+            .map_err(|e| format!("read new stdin: {e}"))?;
+        buf
+    } else {
+        fs::read_to_string(new_path).map_err(|e| format!("read new: {e}"))?
+    };
+
+    // Default labels: derive from path basenames (or "-" if stdin)
+    let old_label_default = if old_path.as_os_str() == "-" {
+        "-".to_string()
+    } else {
+        old_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| old_path.display().to_string())
+    };
+    let new_label_default = if new_path.as_os_str() == "-" {
+        "-".to_string()
+    } else {
+        new_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| new_path.display().to_string())
+    };
     let old_label = label_old.unwrap_or(&old_label_default);
     let new_label = label_new.unwrap_or(&new_label_default);
 
