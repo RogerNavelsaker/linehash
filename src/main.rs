@@ -34,6 +34,9 @@ enum Commands {
         /// Enable fuzzy matching: normalize Unicode quotes/dashes/spaces and whitespace before matching
         #[arg(long)]
         fuzzy: bool,
+        /// Compute diff but do not write the file
+        #[arg(long)]
+        dry_run: bool,
     },
     Skill,
 }
@@ -166,7 +169,7 @@ fn run() -> Result<(), String> {
     let cli = Cli::parse();
     match cli.command.unwrap_or(Commands::Skill) {
         Commands::Read { path, after, offset, limit } => read_command(&path, after.as_deref(), offset, limit),
-        Commands::Edit { path, fuzzy } => edit_command(&path, fuzzy),
+        Commands::Edit { path, fuzzy, dry_run } => edit_command(&path, fuzzy, dry_run),
         Commands::Skill => {
             println!("{SKILL_MARKDOWN}");
             Ok(())
@@ -188,7 +191,7 @@ fn read_command(path: &Path, after: Option<&str>, offset: Option<usize>, limit: 
     Ok(())
 }
 
-fn edit_command(path: &Path, fuzzy: bool) -> Result<(), String> {
+fn edit_command(path: &Path, fuzzy: bool, dry_run: bool) -> Result<(), String> {
     let input = read_stdin().map_err(|e| e.message)?;
     let edits = parse_edits(&input).map_err(|e| e.message)?;
     let _has_replace_all = edits.iter().any(|e| e.op == "replace_all");
@@ -201,8 +204,10 @@ fn edit_command(path: &Path, fuzzy: bool) -> Result<(), String> {
             // Compute diff between pre and post
             let diff = compute_diff(&pre_content, &post_content, path);
 
-            // Write post-edit content back to disk
-            fs::write(path, &post_content).map_err(|e| format!("failed to write file: {e}"))?;
+            // Write post-edit content back to disk (skip in dry-run mode)
+            if !dry_run {
+                fs::write(path, &post_content).map_err(|e| format!("failed to write file: {e}"))?;
+            }
 
             println!(
                 "{}",
@@ -564,6 +569,36 @@ mod edit_write_tests {
         let diff = compute_diff("", "new content\n", &tmp);
         assert!(diff.contains("/dev/null"), "new file diff should have /dev/null: {diff}");
         assert!(diff.contains(&tmp.display().to_string()), "new file diff should have full path: {diff}");
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn dry_run_does_not_write_file() {
+        let tmp = std::env::temp_dir().join(format!("linehash-dryrun-{}.txt", test_id()));
+        fs::write(&tmp, "a\n").unwrap();
+        let input = r#"{"op":"replace","from":"a","to":"a","text":"b"}"#;
+        let pre_content = fs::read_to_string(&tmp).unwrap();
+        let post_content = apply_edits_str(&tmp, input, true).unwrap();
+        let _diff = compute_diff(&pre_content, &post_content, &tmp);
+        // With dry_run=true, the file should NOT be written
+        let unchanged = fs::read_to_string(&tmp).unwrap();
+        assert_eq!(unchanged, "a\n", "dry_run should not modify file");
+        // But post_content has the replacement
+        assert!(post_content.contains("b"), "post_content should have replacement");
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn without_dry_run_file_is_written() {
+        let tmp = std::env::temp_dir().join(format!("linehash-write-{}.txt", test_id()));
+        fs::write(&tmp, "a\n").unwrap();
+        let input = r#"{"op":"replace","from":"a","to":"a","text":"b"}"#;
+        let post_content = apply_edits_str(&tmp, input, true).unwrap();
+        let _diff = compute_diff("a\n", &post_content, &tmp);
+        // Without dry_run, fs::write is called and file changes
+        fs::write(&tmp, &post_content).unwrap();
+        let written = fs::read_to_string(&tmp).unwrap();
+        assert_eq!(written, "b\n", "file should be written without dry_run");
         let _ = fs::remove_file(&tmp);
     }
 }
