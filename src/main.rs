@@ -43,6 +43,12 @@ enum Commands {
         /// Number of context lines (default: 3)
         #[arg(long, default_value_t = 3)]
         context: usize,
+        /// Override `--- a/<...>` header label
+        #[arg(long)]
+        label_old: Option<String>,
+        /// Override `+++ b/<...>` header label
+        #[arg(long)]
+        label_new: Option<String>,
     },
     Skill,
 }
@@ -130,7 +136,7 @@ fn run() -> Result<(), String> {
     match cli.command.unwrap_or(Commands::Skill) {
         Commands::Read { path, after, offset, limit } => read_command(&path, after.as_deref(), offset, limit),
         Commands::Edit { path, fuzzy } => edit_command(&path, fuzzy),
-        Commands::Diff { old, new, context } => diff_command(&old, &new, context),
+        Commands::Diff { old, new, context, label_old, label_new } => diff_command(&old, &new, context, label_old.as_deref(), label_new.as_deref()),
         Commands::Skill => {
             println!("{SKILL_MARKDOWN}");
             Ok(())
@@ -154,17 +160,27 @@ fn read_command(path: &Path, after: Option<&str>, offset: Option<usize>, limit: 
 
 /// Emit a unified diff between two files.
 /// Output format: `--- a/<old>` / `+++ b/<new>` headers, no `Index:` or `===` lines.
-fn diff_command(old_path: &Path, new_path: &Path, context: usize) -> Result<(), String> {
+fn diff_command(
+    old_path: &Path,
+    new_path: &Path,
+    context: usize,
+    label_old: Option<&str>,
+    label_new: Option<&str>,
+) -> Result<(), String> {
     let old_content = fs::read_to_string(old_path).map_err(|e| format!("read old: {e}"))?;
     let new_content = fs::read_to_string(new_path).map_err(|e| format!("read new: {e}"))?;
-    let old_name = old_path
+
+    // Default labels: derive from path basenames
+    let old_label_default = old_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| old_path.display().to_string());
-    let new_name = new_path
+    let new_label_default = new_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| new_path.display().to_string());
+    let old_label = label_old.unwrap_or(&old_label_default);
+    let new_label = label_new.unwrap_or(&new_label_default);
 
     if old_content == new_content {
         return Ok(());
@@ -173,7 +189,7 @@ fn diff_command(old_path: &Path, new_path: &Path, context: usize) -> Result<(), 
     let text_diff = similar::TextDiff::from_lines(&old_content, &new_content);
     let mut unified = similar::udiff::UnifiedDiff::from_text_diff(&text_diff);
     unified.context_radius(context);
-    unified.header(&format!("a/{old_name}"), &format!("b/{new_name}"));
+    unified.header(&format!("a/{old_label}"), &format!("b/{new_label}"));
 
     unified
         .to_writer(io::stdout())
@@ -625,5 +641,20 @@ mod diff_tests {
         // Check no added-content lines (hunk header + is fine)
         let added_lines: Vec<_> = output.lines().filter(|l| l.starts_with("+") && !l.starts_with("+++")).collect();
         assert!(added_lines.is_empty(), "no added lines: {:?}", added_lines);
+    }
+
+    #[test]
+    fn diff_label_flags_override_headers() {
+        let old = "line one\nline two\n";
+        let new = "line one\nline modified\n";
+        let text_diff = similar::TextDiff::from_lines(old, new);
+        let mut unified = similar::udiff::UnifiedDiff::from_text_diff(&text_diff);
+        unified.context_radius(3);
+        unified.header("a/custom_old", "b/custom_new");
+        let mut buf = Vec::new();
+        unified.to_writer(&mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.starts_with("--- a/custom_old"), "custom old label: {}", output);
+        assert!(output.lines().nth(1).unwrap().starts_with("+++ b/custom_new"), "custom new label: {}", output);
     }
 }
