@@ -15,4 +15,5 @@ path = "src/main.rs"
 clap = { version = "4.6.0", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+similar = { version = "2", features = ["text"] }
 xxhash-rust = { version = "0.8.15", features = ["xxh32"] }

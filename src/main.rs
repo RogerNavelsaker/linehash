@@ -35,6 +35,15 @@ enum Commands {
         #[arg(long)]
         fuzzy: bool,
     },
+    Diff {
+        /// Path to the old (original) file
+        old: PathBuf,
+        /// Path to the new (modified) file
+        new: PathBuf,
+        /// Number of context lines (default: 3)
+        #[arg(long, default_value_t = 3)]
+        context: usize,
+    },
     Skill,
 }
 
@@ -121,6 +130,7 @@ fn run() -> Result<(), String> {
     match cli.command.unwrap_or(Commands::Skill) {
         Commands::Read { path, after, offset, limit } => read_command(&path, after.as_deref(), offset, limit),
         Commands::Edit { path, fuzzy } => edit_command(&path, fuzzy),
+        Commands::Diff { old, new, context } => diff_command(&old, &new, context),
         Commands::Skill => {
             println!("{SKILL_MARKDOWN}");
             Ok(())
@@ -139,6 +149,36 @@ fn read_command(path: &Path, after: Option<&str>, offset: Option<usize>, limit: 
     for line in window(&lines, after, offset, limit)? {
         println!("{}", serde_json::to_string(&line).unwrap());
     }
+    Ok(())
+}
+
+/// Emit a unified diff between two files.
+/// Output format: `--- a/<old>` / `+++ b/<new>` headers, no `Index:` or `===` lines.
+fn diff_command(old_path: &Path, new_path: &Path, context: usize) -> Result<(), String> {
+    let old_content = fs::read_to_string(old_path).map_err(|e| format!("read old: {e}"))?;
+    let new_content = fs::read_to_string(new_path).map_err(|e| format!("read new: {e}"))?;
+    let old_name = old_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| old_path.display().to_string());
+    let new_name = new_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| new_path.display().to_string());
+
+    if old_content == new_content {
+        return Ok(());
+    }
+
+    let text_diff = similar::TextDiff::from_lines(&old_content, &new_content);
+    let mut unified = similar::udiff::UnifiedDiff::from_text_diff(&text_diff);
+    unified.context_radius(context);
+    unified.header(&format!("a/{old_name}"), &format!("b/{new_name}"));
+
+    unified
+        .to_writer(io::stdout())
+        .map_err(|e| format!("write diff: {e}"))?;
+
     Ok(())
 }
 
@@ -517,5 +557,73 @@ mod window_tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].line, 1);
         assert_eq!(result[0].text, "a");
+    }
+}
+
+#[cfg(test)]
+mod diff_tests {
+    use super::*;
+    use std::io::Write;
+
+    fn diff_output(old: &str, new: &str, context: usize) -> String {
+        let old_name = "old.txt";
+        let new_name = "new.txt";
+        let text_diff = similar::TextDiff::from_lines(old, new);
+        let mut unified = similar::udiff::UnifiedDiff::from_text_diff(&text_diff);
+        unified.context_radius(context);
+        unified.header(&format!("a/{old_name}"), &format!("b/{new_name}"));
+        let mut buf = Vec::new();
+        unified.to_writer(&mut buf).unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    #[test]
+    fn diff_two_line_change_has_correct_headers() {
+        let old = "line one\nline two\n";
+        let new = "line one\nline modified\n";
+        let output = diff_output(old, new, 3);
+        assert!(output.starts_with("--- a/old.txt"), "headers: {}", output);
+        assert!(output.lines().nth(1).unwrap().starts_with("+++ b/new.txt"), "headers: {}", output);
+        assert!(!output.contains("Index:"), "no Index: header");
+        assert!(!output.contains("==="), "no === header");
+    }
+
+    #[test]
+    fn diff_two_line_change_has_hunk() {
+        let old = "line one\nline two\n";
+        let new = "line one\nline modified\n";
+        let output = diff_output(old, new, 3);
+        assert!(output.contains("@@ -1,2 +1,2 @@"), "hunk header: {}", output);
+        assert!(output.contains("-line two"), "removed line: {}", output);
+        assert!(output.contains("+line modified"), "added line: {}", output);
+    }
+
+    #[test]
+    fn diff_identical_files_returns_empty() {
+        let content = "same content\n";
+        let output = diff_output(content, content, 3);
+        assert_eq!(output, "");
+    }
+
+    #[test]
+    fn diff_addition_has_plus_lines() {
+        let old = "line one\n";
+        let new = "line one\nline two\n";
+        let output = diff_output(old, new, 3);
+        assert!(output.contains("+line two"), "added line: {}", output);
+        // Check no removed-content lines (hunk header + is fine)
+        let removed_lines: Vec<_> = output.lines().filter(|l| l.starts_with("-") && !l.starts_with("---")).collect();
+        assert!(removed_lines.is_empty(), "no removed lines: {:?}", removed_lines);
+    }
+
+    #[test]
+    fn diff_deletion_has_minus_lines() {
+        let old = "line one\nline two\n";
+        let new = "line one\n";
+        let output = diff_output(old, new, 3);
+        assert!(output.contains("-line two"), "removed line: {}", output);
+        // Check no added-content lines (hunk header + is fine)
+        let added_lines: Vec<_> = output.lines().filter(|l| l.starts_with("+") && !l.starts_with("+++")).collect();
+        assert!(added_lines.is_empty(), "no added lines: {:?}", added_lines);
     }
 }
