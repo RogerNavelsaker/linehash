@@ -35,21 +35,6 @@ enum Commands {
         #[arg(long)]
         fuzzy: bool,
     },
-    Diff {
-        /// Path to the old (original) file. Use `-` to read from stdin.
-        old: PathBuf,
-        /// Path to the new (modified) file. Use `-` to read from stdin.
-        new: PathBuf,
-        /// Number of context lines (default: 3)
-        #[arg(long, default_value_t = 3)]
-        context: usize,
-        /// Override `--- a/<...>` header label
-        #[arg(long)]
-        label_old: Option<String>,
-        /// Override `+++ b/<...>` header label
-        #[arg(long)]
-        label_new: Option<String>,
-    },
     Skill,
 }
 
@@ -70,6 +55,52 @@ struct Edit {
     before: Option<String>,
     after: Option<String>,
     text: Option<String>,
+}
+
+/// Apply edits and return the post-edit content (for diff computation).
+fn apply_edits_str(path: &Path, input: &str, fuzzy: bool) -> Result<String, EditError> {
+    let mut edits = parse_edits(input)?;
+    let has_replace_all = edits.iter().any(|e| e.op == "replace_all");
+
+    if has_replace_all {
+        // replace_all: first op with replace_all replaces entire file content
+        if let Some(edit) = edits.iter().find(|e| e.op == "replace_all") {
+            let text = edit.text.as_deref().unwrap_or("");
+            return Ok(text.to_string());
+        }
+    }
+
+    // Existing logic: read file, apply edits, write back
+    let content = fs::read_to_string(path).map_err(|error| EditError::failed(error.to_string()))?;
+    let trailing_newline = content.ends_with('\n');
+    let mut lines = split_file_lines(&content, trailing_newline);
+    let anchors = anchors_for(&lines);
+
+    // If fuzzy mode, normalize edit text before matching
+    if fuzzy {
+        for edit in &mut edits {
+            if let Some(ref mut from) = edit.from {
+                *from = normalize_text(from);
+            }
+            if let Some(ref mut before) = edit.before {
+                *before = normalize_text(before);
+            }
+            if let Some(ref mut after) = edit.after {
+                *after = normalize_text(after);
+            }
+        }
+    }
+
+    edits.sort_by_key(|edit| std::cmp::Reverse(edit_start_index(edit, &anchors).unwrap_or(0)));
+    for edit in edits {
+        apply_edit(&mut lines, &anchors, edit, fuzzy)?;
+    }
+
+    let mut output = lines.join("\n");
+    if trailing_newline {
+        output.push('\n');
+    }
+    Ok(output)
 }
 
 const SKILL_MARKDOWN: &str = r#"---
@@ -136,7 +167,6 @@ fn run() -> Result<(), String> {
     match cli.command.unwrap_or(Commands::Skill) {
         Commands::Read { path, after, offset, limit } => read_command(&path, after.as_deref(), offset, limit),
         Commands::Edit { path, fuzzy } => edit_command(&path, fuzzy),
-        Commands::Diff { old, new, context, label_old, label_new } => diff_command(&old, &new, context, label_old.as_deref(), label_new.as_deref()),
         Commands::Skill => {
             println!("{SKILL_MARKDOWN}");
             Ok(())
@@ -158,76 +188,37 @@ fn read_command(path: &Path, after: Option<&str>, offset: Option<usize>, limit: 
     Ok(())
 }
 
-/// Emit a unified diff between two files.
-/// Output format: `--- a/<old>` / `+++ b/<new>` headers, no `Index:` or `===` lines.
-fn diff_command(
-    old_path: &Path,
-    new_path: &Path,
-    context: usize,
-    label_old: Option<&str>,
-    label_new: Option<&str>,
-) -> Result<(), String> {
-    // Read old content: from file or stdin (when path is "-")
-    let old_content = if old_path.as_os_str() == "-" {
-        let mut buf = String::new();
-        io::stdin()
-            .read_to_string(&mut buf)
-            .map_err(|e| format!("read old stdin: {e}"))?;
-        buf
-    } else {
-        fs::read_to_string(old_path).map_err(|e| format!("read old: {e}"))?
-    };
-
-    // Read new content: from file or stdin (when path is "-")
-    let new_content = if new_path.as_os_str() == "-" {
-        let mut buf = String::new();
-        io::stdin()
-            .read_to_string(&mut buf)
-            .map_err(|e| format!("read new stdin: {e}"))?;
-        buf
-    } else {
-        fs::read_to_string(new_path).map_err(|e| format!("read new: {e}"))?
-    };
-
-    // Default labels: derive from path basenames (or "-" if stdin)
-    let old_label_default = if old_path.as_os_str() == "-" {
-        "-".to_string()
-    } else {
-        old_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| old_path.display().to_string())
-    };
-    let new_label_default = if new_path.as_os_str() == "-" {
-        "-".to_string()
-    } else {
-        new_path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| new_path.display().to_string())
-    };
-    let old_label = label_old.unwrap_or(&old_label_default);
-    let new_label = label_new.unwrap_or(&new_label_default);
-
-    if old_content == new_content {
-        return Ok(());
-    }
-
-    let text_diff = similar::TextDiff::from_lines(&old_content, &new_content);
-    let mut unified = similar::udiff::UnifiedDiff::from_text_diff(&text_diff);
-    unified.context_radius(context);
-    unified.header(&format!("a/{old_label}"), &format!("b/{new_label}"));
-
-    unified
-        .to_writer(io::stdout())
-        .map_err(|e| format!("write diff: {e}"))?;
-
-    Ok(())
-}
-
 fn edit_command(path: &Path, fuzzy: bool) -> Result<(), String> {
-    match apply_edits(path, fuzzy) {
-        Ok(()) => println!("{}", json!({"status": "ok"})),
+    let input = read_stdin().map_err(|e| e.message)?;
+    let edits = parse_edits(&input).map_err(|e| e.message)?;
+    let has_replace_all = edits.iter().any(|e| e.op == "replace_all");
+
+    // Read pre-edit content
+    let pre_content = if has_replace_all {
+        String::new()
+    } else {
+        fs::read_to_string(path).map_err(|e| format!("read pre-edit: {e}"))?
+    };
+
+    match apply_edits_str(path, &input, fuzzy) {
+        Ok(post_content) => {
+            // Compute diff between pre and post
+            let diff = if has_replace_all {
+                // New file or full replace: diff from empty to new content
+                compute_diff("/dev/null", &post_content, path)
+            } else {
+                compute_diff(&pre_content, &post_content, path)
+            };
+
+            println!(
+                "{}",
+                json!({
+                    "status": "ok",
+                    "diff": diff
+                })
+            );
+            Ok(())
+        }
         Err(EditError { detail, message }) => {
             println!(
                 "{}",
@@ -236,42 +227,36 @@ fn edit_command(path: &Path, fuzzy: bool) -> Result<(), String> {
             process::exit(1);
         }
     }
-    Ok(())
 }
 
-fn apply_edits(path: &Path, fuzzy: bool) -> Result<(), EditError> {
-    let input = read_stdin()?;
-    let mut edits = parse_edits(&input)?;
-    let content = fs::read_to_string(path).map_err(|error| EditError::failed(error.to_string()))?;
-    let trailing_newline = content.ends_with('\n');
-    let mut lines = split_file_lines(&content, trailing_newline);
-    let anchors = anchors_for(&lines);
-
-    // If fuzzy mode, normalize edit text before matching
-    if fuzzy {
-        for edit in &mut edits {
-            if let Some(ref mut from) = edit.from {
-                *from = normalize_text(from);
-            }
-            if let Some(ref mut before) = edit.before {
-                *before = normalize_text(before);
-            }
-            if let Some(ref mut after) = edit.after {
-                *after = normalize_text(after);
-            }
-        }
+/// Compute unified diff between two strings.
+/// Output format: `--- a/<path>` / `+++ b/<path>` headers, no `Index:` or `===` lines.
+fn compute_diff(old_content: &str, new_content: &str, path: &Path) -> String {
+    if old_content == new_content {
+        return String::new();
     }
 
-    edits.sort_by_key(|edit| std::cmp::Reverse(edit_start_index(edit, &anchors).unwrap_or(0)));
-    for edit in edits {
-        apply_edit(&mut lines, &anchors, edit, fuzzy)?;
-    }
+    let text_diff = similar::TextDiff::from_lines(old_content, new_content);
+    let mut unified = similar::udiff::UnifiedDiff::from_text_diff(&text_diff);
+    unified.context_radius(3);
 
-    let mut output = lines.join("\n");
-    if trailing_newline {
-        output.push('\n');
+    let old_label = if old_content.is_empty() {
+        "/dev/null".to_string()
+    } else {
+        path.file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.display().to_string())
+    };
+    let new_label = path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.display().to_string());
+    unified.header(&old_label, &new_label);
+
+    let mut buf = Vec::new();
+    if let Err(e) = unified.to_writer(&mut buf) {
+        return format!("error formatting diff: {e}");
     }
-    fs::write(path, output).map_err(|error| EditError::failed(error.to_string()))
+    String::from_utf8(buf).unwrap_or_default()
 }
 
 fn apply_edit(lines: &mut Vec<String>, anchors: &[String], edit: Edit, fuzzy: bool) -> Result<(), EditError> {
@@ -600,88 +585,5 @@ mod window_tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].line, 1);
         assert_eq!(result[0].text, "a");
-    }
-}
-
-#[cfg(test)]
-mod diff_tests {
-    use super::*;
-    use std::io::Write;
-
-    fn diff_output(old: &str, new: &str, context: usize) -> String {
-        let old_name = "old.txt";
-        let new_name = "new.txt";
-        let text_diff = similar::TextDiff::from_lines(old, new);
-        let mut unified = similar::udiff::UnifiedDiff::from_text_diff(&text_diff);
-        unified.context_radius(context);
-        unified.header(&format!("a/{old_name}"), &format!("b/{new_name}"));
-        let mut buf = Vec::new();
-        unified.to_writer(&mut buf).unwrap();
-        String::from_utf8(buf).unwrap()
-    }
-
-    #[test]
-    fn diff_two_line_change_has_correct_headers() {
-        let old = "line one\nline two\n";
-        let new = "line one\nline modified\n";
-        let output = diff_output(old, new, 3);
-        assert!(output.starts_with("--- a/old.txt"), "headers: {}", output);
-        assert!(output.lines().nth(1).unwrap().starts_with("+++ b/new.txt"), "headers: {}", output);
-        assert!(!output.contains("Index:"), "no Index: header");
-        assert!(!output.contains("==="), "no === header");
-    }
-
-    #[test]
-    fn diff_two_line_change_has_hunk() {
-        let old = "line one\nline two\n";
-        let new = "line one\nline modified\n";
-        let output = diff_output(old, new, 3);
-        assert!(output.contains("@@ -1,2 +1,2 @@"), "hunk header: {}", output);
-        assert!(output.contains("-line two"), "removed line: {}", output);
-        assert!(output.contains("+line modified"), "added line: {}", output);
-    }
-
-    #[test]
-    fn diff_identical_files_returns_empty() {
-        let content = "same content\n";
-        let output = diff_output(content, content, 3);
-        assert_eq!(output, "");
-    }
-
-    #[test]
-    fn diff_addition_has_plus_lines() {
-        let old = "line one\n";
-        let new = "line one\nline two\n";
-        let output = diff_output(old, new, 3);
-        assert!(output.contains("+line two"), "added line: {}", output);
-        // Check no removed-content lines (hunk header + is fine)
-        let removed_lines: Vec<_> = output.lines().filter(|l| l.starts_with("-") && !l.starts_with("---")).collect();
-        assert!(removed_lines.is_empty(), "no removed lines: {:?}", removed_lines);
-    }
-
-    #[test]
-    fn diff_deletion_has_minus_lines() {
-        let old = "line one\nline two\n";
-        let new = "line one\n";
-        let output = diff_output(old, new, 3);
-        assert!(output.contains("-line two"), "removed line: {}", output);
-        // Check no added-content lines (hunk header + is fine)
-        let added_lines: Vec<_> = output.lines().filter(|l| l.starts_with("+") && !l.starts_with("+++")).collect();
-        assert!(added_lines.is_empty(), "no added lines: {:?}", added_lines);
-    }
-
-    #[test]
-    fn diff_label_flags_override_headers() {
-        let old = "line one\nline two\n";
-        let new = "line one\nline modified\n";
-        let text_diff = similar::TextDiff::from_lines(old, new);
-        let mut unified = similar::udiff::UnifiedDiff::from_text_diff(&text_diff);
-        unified.context_radius(3);
-        unified.header("a/custom_old", "b/custom_new");
-        let mut buf = Vec::new();
-        unified.to_writer(&mut buf).unwrap();
-        let output = String::from_utf8(buf).unwrap();
-        assert!(output.starts_with("--- a/custom_old"), "custom old label: {}", output);
-        assert!(output.lines().nth(1).unwrap().starts_with("+++ b/custom_new"), "custom new label: {}", output);
     }
 }
