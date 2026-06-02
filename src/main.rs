@@ -31,6 +31,9 @@ enum Commands {
     },
     Edit {
         path: PathBuf,
+        /// Enable fuzzy matching: normalize Unicode quotes/dashes/spaces and whitespace before matching
+        #[arg(long)]
+        fuzzy: bool,
     },
     Skill,
 }
@@ -83,6 +86,26 @@ Edit result:
 - error: `{"status":"error","detail":"anchor_invalid","message":"anchor not found"}`
 "#;
 
+/// Normalize text for fuzzy matching: Unicode normalization + whitespace normalization.
+/// Multi-pass: quotes/dashes → ASCII, NBSP → space, collapse whitespace, trim.
+fn normalize_text(input: &str) -> String {
+    let mut s = input.to_string();
+    // Pass 1: Unicode curly quotes → straight quotes
+    s = s.replace('\u{201c}', "\"").replace('\u{201d}', "\"");
+    s = s.replace('\u{2018}', "'").replace('\u{2019}', "'");
+    // Pass 2: Unicode em/en dashes → regular dash
+    s = s.replace('\u{2014}', "-").replace('\u{2013}', "-");
+    // Pass 3: Unicode non-breaking space → regular space
+    s = s.replace('\u{00a0}', " ");
+    // Pass 4: Collapse multiple whitespace to single space
+    while s.contains("  ") {
+        s = s.replace("  ", " ");
+    }
+    // Pass 5: Trim
+    s = s.trim().to_string();
+    s
+}
+
 fn main() {
     if let Err(error) = run() {
         println!(
@@ -97,7 +120,7 @@ fn run() -> Result<(), String> {
     let cli = Cli::parse();
     match cli.command.unwrap_or(Commands::Skill) {
         Commands::Read { path, after, offset, limit } => read_command(&path, after.as_deref(), offset, limit),
-        Commands::Edit { path } => edit_command(&path),
+        Commands::Edit { path, fuzzy } => edit_command(&path, fuzzy),
         Commands::Skill => {
             println!("{SKILL_MARKDOWN}");
             Ok(())
@@ -119,8 +142,8 @@ fn read_command(path: &Path, after: Option<&str>, offset: Option<usize>, limit: 
     Ok(())
 }
 
-fn edit_command(path: &Path) -> Result<(), String> {
-    match apply_edits(path) {
+fn edit_command(path: &Path, fuzzy: bool) -> Result<(), String> {
+    match apply_edits(path, fuzzy) {
         Ok(()) => println!("{}", json!({"status": "ok"})),
         Err(EditError { detail, message }) => {
             println!(
@@ -133,7 +156,7 @@ fn edit_command(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn apply_edits(path: &Path) -> Result<(), EditError> {
+fn apply_edits(path: &Path, fuzzy: bool) -> Result<(), EditError> {
     let input = read_stdin()?;
     let mut edits = parse_edits(&input)?;
     let content = fs::read_to_string(path).map_err(|error| EditError::failed(error.to_string()))?;
@@ -141,9 +164,24 @@ fn apply_edits(path: &Path) -> Result<(), EditError> {
     let mut lines = split_file_lines(&content, trailing_newline);
     let anchors = anchors_for(&lines);
 
+    // If fuzzy mode, normalize edit text before matching
+    if fuzzy {
+        for edit in &mut edits {
+            if let Some(ref mut from) = edit.from {
+                *from = normalize_text(from);
+            }
+            if let Some(ref mut before) = edit.before {
+                *before = normalize_text(before);
+            }
+            if let Some(ref mut after) = edit.after {
+                *after = normalize_text(after);
+            }
+        }
+    }
+
     edits.sort_by_key(|edit| std::cmp::Reverse(edit_start_index(edit, &anchors).unwrap_or(0)));
     for edit in edits {
-        apply_edit(&mut lines, &anchors, edit)?;
+        apply_edit(&mut lines, &anchors, edit, fuzzy)?;
     }
 
     let mut output = lines.join("\n");
@@ -153,16 +191,28 @@ fn apply_edits(path: &Path) -> Result<(), EditError> {
     fs::write(path, output).map_err(|error| EditError::failed(error.to_string()))
 }
 
-fn apply_edit(lines: &mut Vec<String>, anchors: &[String], edit: Edit) -> Result<(), EditError> {
+fn apply_edit(lines: &mut Vec<String>, anchors: &[String], edit: Edit, fuzzy: bool) -> Result<(), EditError> {
     match edit.op.as_str() {
-        "replace" => replace_lines(lines, anchors, edit),
+        "replace" => replace_lines(lines, anchors, edit, fuzzy),
         "insert_before" => insert_before(lines, anchors, edit),
         "insert_after" => insert_after(lines, anchors, edit),
         _ => Err(EditError::input("unknown op")),
     }
 }
 
-fn replace_lines(lines: &mut Vec<String>, anchors: &[String], edit: Edit) -> Result<(), EditError> {
+/// Look for a line by normalized text content (fuzzy matching).
+/// Returns the index of the first matching line, or an error.
+fn find_line_by_normalized_text(lines: &[String], target: &str) -> Result<usize, EditError> {
+    let normalized_target = normalize_text(target);
+    for (index, line) in lines.iter().enumerate() {
+        if normalize_text(line.trim()) == normalized_target {
+            return Ok(index);
+        }
+    }
+    Err(EditError::anchor("fuzzy match: text not found in any line"))
+}
+
+fn replace_lines(lines: &mut Vec<String>, anchors: &[String], edit: Edit, fuzzy: bool) -> Result<(), EditError> {
     let text = edit.text.unwrap_or_default();
     if let Some(anchor) = edit.anchor {
         let index = anchor_index(anchors, &anchor)?;
@@ -176,8 +226,18 @@ fn replace_lines(lines: &mut Vec<String>, anchors: &[String], edit: Edit) -> Res
     let to = edit
         .to
         .ok_or_else(|| EditError::input("replace requires anchor or from/to"))?;
-    let start = anchor_index(anchors, &from)?;
-    let end = anchor_index(anchors, &to)?;
+
+    // Try anchor-based matching first
+    let start = match anchor_index(anchors, &from) {
+        Ok(idx) => idx,
+        Err(_) if fuzzy => find_line_by_normalized_text(lines, &from)?,
+        Err(e) => return Err(e),
+    };
+    let end = match anchor_index(anchors, &to) {
+        Ok(idx) => idx,
+        Err(_) if fuzzy => find_line_by_normalized_text(lines, &to)?,
+        Err(e) => return Err(e),
+    };
     if start > end {
         return Err(EditError::input("from anchor is after to anchor"));
     }

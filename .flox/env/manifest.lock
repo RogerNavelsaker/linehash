@@ -1,0 +1,563 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.12.0",
+    "install": {
+      "cargo": {
+        "pkg-path": "cargo"
+      },
+      "openssl": {
+        "pkg-path": "openssl"
+      },
+      "pkg-config": {
+        "pkg-path": "pkg-config"
+      },
+      "rustc": {
+        "pkg-path": "rustc"
+      }
+    },
+    "vars": {
+      "CC": "/usr/bin/gcc",
+      "CXX": "/usr/bin/g++",
+      "PATH": "/home/rona/.local/bin:$PATH",
+      "RUSTFLAGS": "-C target-cpu=native"
+    },
+    "hook": {},
+    "profile": {},
+    "options": {}
+  },
+  "packages": [
+    {
+      "attr_path": "cargo",
+      "broken": false,
+      "derivation": "/nix/store/04ili1yy79h13xnpghs37y28vns8r69x-cargo-1.95.0.drv",
+      "description": "Downloads your Rust project's dependencies and builds your project",
+      "install_id": "cargo",
+      "license": "[ MIT, Apache-2.0 ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "cargo-1.95.0",
+      "pname": "cargo",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T07:06:02.754680Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.95.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/2vdxz4xwplgb5rgfhqr0jr85fd7qqgmb-cargo-1.95.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "cargo",
+      "broken": false,
+      "derivation": "/nix/store/ddzw6symm08w2hn3nghsi3gmvgyzjphb-cargo-1.95.0.drv",
+      "description": "Downloads your Rust project's dependencies and builds your project",
+      "install_id": "cargo",
+      "license": "[ MIT, Apache-2.0 ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "cargo-1.95.0",
+      "pname": "cargo",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T07:34:25.990624Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.95.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/f8rxcxfwk1qhazprqnfji401x08xp9dr-cargo-1.95.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "cargo",
+      "broken": false,
+      "derivation": "/nix/store/mdzqay9axyaj4x840qld6wq2g0ha1frw-cargo-1.95.0.drv",
+      "description": "Downloads your Rust project's dependencies and builds your project",
+      "install_id": "cargo",
+      "license": "[ MIT, Apache-2.0 ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "cargo-1.95.0",
+      "pname": "cargo",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T08:02:11.966170Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.95.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/5z8rq35zk9jqnnfw4m49fwpgq7phdhai-cargo-1.95.0"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "cargo",
+      "broken": false,
+      "derivation": "/nix/store/f61lsy7bpya0azm8z6cxw05nj79g2dn9-cargo-1.95.0.drv",
+      "description": "Downloads your Rust project's dependencies and builds your project",
+      "install_id": "cargo",
+      "license": "[ MIT, Apache-2.0 ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "cargo-1.95.0",
+      "pname": "cargo",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T08:32:51.069618Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.95.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/z480b23kymbmrijrl49246mrzyphli15-cargo-1.95.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "openssl",
+      "broken": false,
+      "derivation": "/nix/store/r1fqhfkxr6q1h01fv54kr7mynp0jg5wi-openssl-3.6.2.drv",
+      "description": "Cryptographic library that implements the SSL and TLS protocols",
+      "install_id": "openssl",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "openssl-3.6.2",
+      "pname": "openssl",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T07:06:33.176524Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.6.2",
+      "outputs_to_install": [
+        "bin",
+        "man"
+      ],
+      "outputs": {
+        "bin": "/nix/store/r51ad62j4z7xzqa2svcb6d1b443kphzr-openssl-3.6.2-bin",
+        "dev": "/nix/store/8g69q86jfk5rpa34gny4rh057h5yb1nw-openssl-3.6.2-dev",
+        "doc": "/nix/store/jygjy36g9lqfxvvchydd1c1zjs7pmcp1-openssl-3.6.2-doc",
+        "man": "/nix/store/f8c4k06h4kbcpdy4vbw8dq5xiypbhcfp-openssl-3.6.2-man",
+        "out": "/nix/store/a3hhkd5vzw97issax60xx47qfnkl6ddf-openssl-3.6.2"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "openssl",
+      "broken": false,
+      "derivation": "/nix/store/g4jrp8mgfp7sp5qx8g4fp3spk2z62dh9-openssl-3.6.2.drv",
+      "description": "Cryptographic library that implements the SSL and TLS protocols",
+      "install_id": "openssl",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "openssl-3.6.2",
+      "pname": "openssl",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T07:35:13.187005Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.6.2",
+      "outputs_to_install": [
+        "bin",
+        "bin",
+        "man"
+      ],
+      "outputs": {
+        "bin": "/nix/store/qah6sg7gj1kks5qcawgkrpxlc4dlv90q-openssl-3.6.2-bin",
+        "debug": "/nix/store/csb2j07fl5qx2k5qxg0bzd2dn6d97799-openssl-3.6.2-debug",
+        "dev": "/nix/store/is2mz9ln2mszv2fl59wg5rr7casdqyk5-openssl-3.6.2-dev",
+        "doc": "/nix/store/a3ww9j6xvhxbiadfhqspd9pbanax7mda-openssl-3.6.2-doc",
+        "man": "/nix/store/6lam03sf9sngz205fmjvlnwapj0dkha3-openssl-3.6.2-man",
+        "out": "/nix/store/bl7rmhhsy7vjb9qm3jfwgqpv3cn7wfb1-openssl-3.6.2"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "openssl",
+      "broken": false,
+      "derivation": "/nix/store/6dkb3215v5jlnr6w720l7gfxgsvvsx6z-openssl-3.6.2.drv",
+      "description": "Cryptographic library that implements the SSL and TLS protocols",
+      "install_id": "openssl",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "openssl-3.6.2",
+      "pname": "openssl",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T08:02:41.973926Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.6.2",
+      "outputs_to_install": [
+        "bin",
+        "man"
+      ],
+      "outputs": {
+        "bin": "/nix/store/yvchmpk2820sv464gn31gh606yj3iwaj-openssl-3.6.2-bin",
+        "dev": "/nix/store/344ipmn38akr4xfnfccbpvh5d54sjjnn-openssl-3.6.2-dev",
+        "doc": "/nix/store/sa017appbz8cy3lyvjc99m0y285axdas-openssl-3.6.2-doc",
+        "man": "/nix/store/z7c44v0zyydx17r50k0jlp3cw7z9pdvw-openssl-3.6.2-man",
+        "out": "/nix/store/ly6s18plvybyggy2m862bkdg3ghghx2j-openssl-3.6.2"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "openssl",
+      "broken": false,
+      "derivation": "/nix/store/h4fkx5vvws4bnpfhhk07k0scjymj189x-openssl-3.6.2.drv",
+      "description": "Cryptographic library that implements the SSL and TLS protocols",
+      "install_id": "openssl",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "openssl-3.6.2",
+      "pname": "openssl",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T08:33:38.810775Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.6.2",
+      "outputs_to_install": [
+        "bin",
+        "bin",
+        "bin",
+        "bin",
+        "man"
+      ],
+      "outputs": {
+        "bin": "/nix/store/zyrxhd7nwmkcs11m144jagxcmddw2i41-openssl-3.6.2-bin",
+        "debug": "/nix/store/bw61f4m3imcwdwpc8011rj9db6pmkfdl-openssl-3.6.2-debug",
+        "dev": "/nix/store/wxws7pwyzk8mbmjc1rwwwx9v184hh67v-openssl-3.6.2-dev",
+        "doc": "/nix/store/davd7p64vvlg309ydxws2xc7z0ck9vvv-openssl-3.6.2-doc",
+        "man": "/nix/store/lnqjx5rpvid4ancfjxln38bwswmpvg8y-openssl-3.6.2-man",
+        "out": "/nix/store/y18pnbvfarnilsmgayswvi1khaw9wbsc-openssl-3.6.2"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "pkg-config",
+      "broken": false,
+      "derivation": "/nix/store/spaf8jq1bx4kjig7xgf4h1l6zpwq5m8b-pkg-config-wrapper-0.29.2.drv",
+      "description": "Tool that allows packages to find out information about other packages (wrapper script)",
+      "install_id": "pkg-config",
+      "license": "GPL-2.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "pkg-config-wrapper-0.29.2",
+      "pname": "pkg-config",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T07:06:41.921502Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.29.2",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "doc": "/nix/store/29wlw531i4q0da4maa5bab1hy8p58d6v-pkg-config-wrapper-0.29.2-doc",
+        "man": "/nix/store/pk37i8cqgq803ni2gc7fx8j8dmnlq4hz-pkg-config-wrapper-0.29.2-man",
+        "out": "/nix/store/lzrwr375jqhhbca116kja96xf1md83l8-pkg-config-wrapper-0.29.2"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "pkg-config",
+      "broken": false,
+      "derivation": "/nix/store/zi6fsgrz6swg8zdqqs2jq264756q5bpf-pkg-config-wrapper-0.29.2.drv",
+      "description": "Tool that allows packages to find out information about other packages (wrapper script)",
+      "install_id": "pkg-config",
+      "license": "GPL-2.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "pkg-config-wrapper-0.29.2",
+      "pname": "pkg-config",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T07:35:25.467638Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.29.2",
+      "outputs_to_install": [
+        "man",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "doc": "/nix/store/h67f59js5mciz53frb0m71jlbzkvv0y2-pkg-config-wrapper-0.29.2-doc",
+        "man": "/nix/store/wg08qnsfqmyy5mgx74jiid7h1bnv8a8b-pkg-config-wrapper-0.29.2-man",
+        "out": "/nix/store/c7vwy0gl1q0agl2h22gi0m9dg7xxad2l-pkg-config-wrapper-0.29.2"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "pkg-config",
+      "broken": false,
+      "derivation": "/nix/store/ms89yx4y91z0lhw83sf9hadqw2w5h9zx-pkg-config-wrapper-0.29.2.drv",
+      "description": "Tool that allows packages to find out information about other packages (wrapper script)",
+      "install_id": "pkg-config",
+      "license": "GPL-2.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "pkg-config-wrapper-0.29.2",
+      "pname": "pkg-config",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T08:02:50.886718Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.29.2",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "doc": "/nix/store/lmzgf4hlx26dxbsl6hnqr0imwkygq6zb-pkg-config-wrapper-0.29.2-doc",
+        "man": "/nix/store/masw8xvkn6ygkbi35myxy0ngzxknpva6-pkg-config-wrapper-0.29.2-man",
+        "out": "/nix/store/8cs8a12z75g9lnpch92y1f7bb9kqmgrz-pkg-config-wrapper-0.29.2"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "pkg-config",
+      "broken": false,
+      "derivation": "/nix/store/gfzk85k58qbgzfw0ymjz8w3z8cfjf0m1-pkg-config-wrapper-0.29.2.drv",
+      "description": "Tool that allows packages to find out information about other packages (wrapper script)",
+      "install_id": "pkg-config",
+      "license": "GPL-2.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "pkg-config-wrapper-0.29.2",
+      "pname": "pkg-config",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T08:33:50.777986Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.29.2",
+      "outputs_to_install": [
+        "man",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "doc": "/nix/store/lghsjphn6xrfac5q2zqnbbxvrmj6c3s7-pkg-config-wrapper-0.29.2-doc",
+        "man": "/nix/store/6ki0phq7gff15ywxghxbhpcg3390x0hp-pkg-config-wrapper-0.29.2-man",
+        "out": "/nix/store/1m05k7xgfnw6jc21xxk5681ni3ar97wf-pkg-config-wrapper-0.29.2"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "rustc",
+      "broken": false,
+      "derivation": "/nix/store/ga3xdqky2y8bx8l0cp34yjpqwnwgfa6m-rustc-wrapper-1.95.0.drv",
+      "description": "Safe, concurrent, practical language (wrapper script)",
+      "install_id": "rustc",
+      "license": "[ MIT, Apache-2.0 ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "rustc-wrapper-1.95.0",
+      "pname": "rustc",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T07:07:36.599670Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.95.0",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "doc": "/nix/store/2wiph2c9mpr0gbgan0ixpnr51pdfhlhj-rustc-wrapper-1.95.0-doc",
+        "man": "/nix/store/zwylsaxwxgmbl38n3n38ym2yp8d4vh3l-rustc-wrapper-1.95.0-man",
+        "out": "/nix/store/z8dhxkw9d2bclp4hj4byyxmbihr8w4an-rustc-wrapper-1.95.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "rustc",
+      "broken": false,
+      "derivation": "/nix/store/31cmzg65yvkdiy8jq66q84mxkbfqvagx-rustc-wrapper-1.95.0.drv",
+      "description": "Safe, concurrent, practical language (wrapper script)",
+      "install_id": "rustc",
+      "license": "[ MIT, Apache-2.0 ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "rustc-wrapper-1.95.0",
+      "pname": "rustc",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T07:36:37.074751Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.95.0",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "doc": "/nix/store/wqzfi80f80r689n3knjqsn31zqz68z4q-rustc-wrapper-1.95.0-doc",
+        "man": "/nix/store/p3azdhlb0nk5kz1wqc22v7srwsb37m24-rustc-wrapper-1.95.0-man",
+        "out": "/nix/store/nh052ln9q9r24p3rb6zxiqqjy4anxa56-rustc-wrapper-1.95.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "rustc",
+      "broken": false,
+      "derivation": "/nix/store/52f1rv87m574qginv1djl7daf3zvd20v-rustc-wrapper-1.95.0.drv",
+      "description": "Safe, concurrent, practical language (wrapper script)",
+      "install_id": "rustc",
+      "license": "[ MIT, Apache-2.0 ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "rustc-wrapper-1.95.0",
+      "pname": "rustc",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T08:03:45.149919Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.95.0",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "doc": "/nix/store/z0jj0z80mr79c8z5mrw8k8rmp9jn43zh-rustc-wrapper-1.95.0-doc",
+        "man": "/nix/store/2cvnw62k02n4afiahfrip1ambv8c2489-rustc-wrapper-1.95.0-man",
+        "out": "/nix/store/6b0k5kdmlfl91qa8mk3ssfgvskqkvy4r-rustc-wrapper-1.95.0"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "rustc",
+      "broken": false,
+      "derivation": "/nix/store/hz2z45zb9m1m6681n1qpcq2k6b63ardp-rustc-wrapper-1.95.0.drv",
+      "description": "Safe, concurrent, practical language (wrapper script)",
+      "install_id": "rustc",
+      "license": "[ MIT, Apache-2.0 ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "name": "rustc-wrapper-1.95.0",
+      "pname": "rustc",
+      "rev": "64c08a7ca051951c8eae34e3e3cb1e202fe36786",
+      "rev_count": 1004030,
+      "rev_date": "2026-05-23T18:24:25Z",
+      "scrape_date": "2026-05-26T08:35:01.408389Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.95.0",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "doc": "/nix/store/m4rhqgg9qqkjy7zv9jg4z21fm92y82r2-rustc-wrapper-1.95.0-doc",
+        "man": "/nix/store/ivd567y3li0c80h3z5w77nh8m1ga340h-rustc-wrapper-1.95.0-man",
+        "out": "/nix/store/wnhmqix7bippbbzasj29qiyb422g9asg-rustc-wrapper-1.95.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}
