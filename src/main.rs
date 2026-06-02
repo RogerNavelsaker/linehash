@@ -193,22 +193,13 @@ fn edit_command(path: &Path, fuzzy: bool) -> Result<(), String> {
     let edits = parse_edits(&input).map_err(|e| e.message)?;
     let has_replace_all = edits.iter().any(|e| e.op == "replace_all");
 
-    // Read pre-edit content
-    let pre_content = if has_replace_all {
-        String::new()
-    } else {
-        fs::read_to_string(path).map_err(|e| format!("read pre-edit: {e}"))?
-    };
+    // Read pre-edit content (always read from file, even for replace_all)
+    let pre_content = fs::read_to_string(path).unwrap_or_default();
 
     match apply_edits_str(path, &input, fuzzy) {
         Ok(post_content) => {
             // Compute diff between pre and post
-            let diff = if has_replace_all {
-                // New file or full replace: diff from empty to new content
-                compute_diff("/dev/null", &post_content, path)
-            } else {
-                compute_diff(&pre_content, &post_content, path)
-            };
+            let diff = compute_diff(&pre_content, &post_content, path);
 
             println!(
                 "{}",
