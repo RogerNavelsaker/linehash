@@ -191,7 +191,7 @@ fn read_command(path: &Path, after: Option<&str>, offset: Option<usize>, limit: 
 fn edit_command(path: &Path, fuzzy: bool) -> Result<(), String> {
     let input = read_stdin().map_err(|e| e.message)?;
     let edits = parse_edits(&input).map_err(|e| e.message)?;
-    let has_replace_all = edits.iter().any(|e| e.op == "replace_all");
+    let _has_replace_all = edits.iter().any(|e| e.op == "replace_all");
 
     // Read pre-edit content (always read from file, even for replace_all)
     let pre_content = fs::read_to_string(path).unwrap_or_default();
@@ -200,6 +200,9 @@ fn edit_command(path: &Path, fuzzy: bool) -> Result<(), String> {
         Ok(post_content) => {
             // Compute diff between pre and post
             let diff = compute_diff(&pre_content, &post_content, path);
+
+            // Write post-edit content back to disk
+            fs::write(path, &post_content).map_err(|e| format!("failed to write file: {e}"))?;
 
             println!(
                 "{}",
@@ -234,13 +237,9 @@ fn compute_diff(old_content: &str, new_content: &str, path: &Path) -> String {
     let old_label = if old_content.is_empty() {
         "/dev/null".to_string()
     } else {
-        path.file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.display().to_string())
+        path.display().to_string()
     };
-    let new_label = path.file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.display().to_string());
+    let new_label = path.display().to_string();
     unified.header(&old_label, &new_label);
 
     let mut buf = Vec::new();
@@ -455,6 +454,7 @@ fn read_stdin() -> Result<String, EditError> {
     Ok(input)
 }
 
+#[derive(Debug)]
 struct EditError {
     detail: &'static str,
     message: String,
@@ -503,6 +503,68 @@ mod tests {
             payload_lines("a\nb"),
             vec!["a".to_string(), "b".to_string()]
         );
+    }
+}
+
+// Additional tests for fuzzy write + diff header path
+#[cfg(test)]
+mod edit_write_tests {
+    use super::*;
+
+    fn test_id() -> String {
+        use std::time::SystemTime;
+        let s = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        s.chars().take(8).collect()
+    }
+
+    #[test]
+    fn fuzzy_edit_returns_replacement_content() {
+        let tmp = std::env::temp_dir().join(format!("linehash-fuzzy-write-{}.txt", test_id()));
+        fs::write(&tmp, "line one: alpha\nline two: beta\n").unwrap();
+        let input = r#"{"op":"replace","from":"line   one:   alpha","to":"line   one:   alpha","text":"LINE ONE: ALPHA"}"#;
+        let post = apply_edits_str(&tmp, input, true).expect("apply_edits_str should succeed");
+        assert!(post.contains("LINE ONE: ALPHA"), "post_content should contain replacement: {post}");
+        // apply_edits_str is read-only; file should be unchanged
+        let still_old = fs::read_to_string(&tmp).unwrap();
+        assert!(still_old.contains("line one: alpha"));
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn edit_command_fuzzy_writes_to_disk() {
+        let tmp = std::env::temp_dir().join(format!("linehash-fuzzy-disk-{}.txt", test_id()));
+        fs::write(&tmp, "line one: alpha\nline two: beta\n").unwrap();
+        let input = r#"{"op":"replace","from":"line   one:   alpha","to":"line   one:   alpha","text":"LINE ONE: ALPHA"}"#;
+        let pre_content = fs::read_to_string(&tmp).unwrap_or_default();
+        let post_content = apply_edits_str(&tmp, input, true).expect("apply_edits_str should succeed");
+        let _diff = compute_diff(&pre_content, &post_content, &tmp);
+        // The critical fix: write post_content back to disk
+        fs::write(&tmp, &post_content).unwrap();
+        let written = fs::read_to_string(&tmp).unwrap();
+        assert!(written.contains("LINE ONE: ALPHA"), "file should contain replacement: {written}");
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn diff_header_uses_full_path() {
+        let tmp = std::env::temp_dir().join(format!("linehash-header-{}.txt", test_id()));
+        fs::write(&tmp, "old content\n").unwrap();
+        let diff = compute_diff("old content\n", "new content\n", &tmp);
+        assert!(diff.contains(&tmp.display().to_string()), "diff header should use full path: {diff}");
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn diff_header_new_file_uses_dev_null() {
+        let tmp = std::env::temp_dir().join(format!("linehash-header-new-{}.txt", test_id()));
+        let diff = compute_diff("", "new content\n", &tmp);
+        assert!(diff.contains("/dev/null"), "new file diff should have /dev/null: {diff}");
+        assert!(diff.contains(&tmp.display().to_string()), "new file diff should have full path: {diff}");
+        let _ = fs::remove_file(&tmp);
     }
 }
 
