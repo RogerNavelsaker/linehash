@@ -39,10 +39,10 @@
           };
 
           devShells.default = pkgs.mkShell {
-            buildInputs = [ pkgs.rustc pkgs.cargo pkgs.pkg-config pkgs.openssl ];
-            # Force real GCC — not the flox wrapper that rejects -m64
-            CC = "/usr/bin/gcc";
-            CXX = "/usr/bin/g++";
+            buildInputs = [ pkgs.rustc pkgs.cargo pkgs.pkg-config pkgs.openssl pkgs.gcc ];
+            # Keep compiler selection reproducible with the pinned Nixpkgs toolchain.
+            CC = "${pkgs.gcc}/bin/gcc";
+            CXX = "${pkgs.gcc}/bin/g++";
             RUSTFLAGS = "-C target-cpu=native";
             shellHook = ''
               echo "linehash dev shell"
