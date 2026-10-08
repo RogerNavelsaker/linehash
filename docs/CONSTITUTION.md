@@ -75,9 +75,7 @@ their work do not file.
 ## Article IX — The constitution outranks the population
 
 Changes to this file, to auditor prompts (the agent entries for
-gatewatch / ratchetwatch / tastewatch — today `agents/*.md`, historically
-rendered under `.canopy/`; the `.canopy/` references here are struck in
-the phase-C canopy sweep, warren-6fcd), or to `.warren/triggers.yaml`
+gatewatch / ratchetwatch / tastewatch — today `.warren/triggers.yaml`), or to `.warren/triggers.yaml`
 audit entries require explicit human review — they must not ride an
 auto-merged PR. Any auditor that observes a merged change to these
 files without human approval files a priority-1 finding citing this
@@ -85,9 +83,13 @@ article. The population does not rewrite its own mandate.
 
 Executable form: the "Article IX check" step in
 `.github/workflows/auto-merge.yml` refuses to enable auto-merge on any
-PR touching this file, `.warren/triggers.yaml`, `.canopy/`, or that
-workflow itself. The auditors still verify (the gate can be deleted;
-the deletion is itself a protected change).
+PR touching this file, `.warren/triggers.yaml`, or that workflow itself.
+The auditors still verify (the gate can be deleted; the deletion is
+itself a protected change).
+
+> **Not yet implemented:** `.github/workflows/auto-merge.yml` does not
+> exist. The Article IX check is currently manual — protected files
+> require human review before merging.
 
 ## Amendments
 
@@ -128,8 +130,8 @@ their own mandate, and every finding is as reviewable as any other seed.
   before warden-digest) — tastewatch files its taste digest seed first
   so warden-digest can synthesize it alongside the other auditors'.
 
-Both trigger entries are in `.warren/triggers.yaml` and are protected by
-Article IX (require human review to change).
+Both trigger entries are planned for `.warren/triggers.yaml` and will be
+protected by Article IX (require human review to change).
 
 ### Autonomy-promotion recommendations
 
@@ -137,6 +139,6 @@ When tastewatch's precision table shows consistent, high-precision findings
 from an auditor, tastewatch *recommends* autonomy promotion in its digest.
 These recommendations are advisory — they are recorded in the digest seed
 for a human to route as a proposed seed or amendment, and any resulting
-change to `.canopy/` or `.warren/triggers.yaml` requires explicit human
-review (Article IX). No auditor may grant itself or another auditor
-autonomous dispatch authority.
+change to `.warren/triggers.yaml` requires explicit human review
+(Article IX). No auditor may grant itself or another auditor autonomous
+dispatch authority.
