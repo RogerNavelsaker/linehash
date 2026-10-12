@@ -25,11 +25,6 @@
             nativeBuildInputs = [ pkgs.pkg-config ];
             buildInputs = [ pkgs.openssl ];
 
-            postInstall = ''
-              install -Dm755 target/release/linehash $out/bin/linehash
-              install -Dm755 target/release/le $out/bin/le
-            '';
-
             meta = {
               description = "JSONL line-hash file tool for AI agents";
               homepage = "https://github.com/RogerNavelsaker/linehash";
