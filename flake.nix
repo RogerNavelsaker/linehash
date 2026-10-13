@@ -25,10 +25,8 @@
             nativeBuildInputs = [ pkgs.pkg-config ];
             buildInputs = [ pkgs.openssl ];
 
-            postInstall = ''
-              install -Dm755 target/release/linehash $out/bin/linehash
-              install -Dm755 target/release/le $out/bin/le
-            '';
+            # Binaries are installed by cargoInstallHook, which copies every
+            # executable from target/<triple>/release/ to $out/bin (linehash and le).
 
             meta = {
               description = "JSONL line-hash file tool for AI agents";
